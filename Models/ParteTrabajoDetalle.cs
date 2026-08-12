@@ -18,6 +18,10 @@
         public string? UsuarioCreacion { get; set; }
         public DateTime? FechaModificacion { get; set; }
         public string? UsuarioModificacion { get; set; }
+        public string? CodigoCiclo { get; set; }              // char(6)
+        public string? ValorCiclo { get; set; }               // varchar(50)
+        public string? Material { get; set; }                 // varchar(10)
+        public decimal? PHoras { get; set; }                  // numeric(20,2)
 
         // Propiedad de navegación: el detalle pertenece a un parte
         public ParteTrabajo ParteTrabajo { get; set; } = null!;

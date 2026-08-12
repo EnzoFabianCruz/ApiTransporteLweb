@@ -23,6 +23,8 @@ namespace ApiTransporteLweb.Models
         public string UsuarioCreacion { get; set; } = null!;
         public DateTime? FechaModificacion { get; set; }
         public string? UsuarioModificacion { get; set; }
+        public string? Turno { get; set; }                    // char(1)
+        public decimal? Combustible { get; set; }              // numeric(20,3)
 
         // Un parte tiene muchos detalles
         public ICollection<ParteTrabajoDetalle> Detalles { get; set; } = new List<ParteTrabajoDetalle>();

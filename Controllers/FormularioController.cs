@@ -306,7 +306,7 @@ namespace ApiTransporteLweb.Controllers
                 siguiente = maximo + 1;
             }
 
-            return siguiente.ToString("D8"); // 1 -> "00000001"
+            return siguiente.ToString("D10"); // 1 -> "0000000001"
         }
     }
 }

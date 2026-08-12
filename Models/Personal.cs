@@ -9,6 +9,8 @@ namespace ApiTransporteLweb.Models
         public string? ApellidoMaterno { get; set; }            // varchar(35)
         public string? Nombres { get; set; }                    // varchar(50)
 
+        public string? PreCargo { get; set; }                   // char(3), relaciona con PuestoTrabajo.CodigoPuesto
+
         [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
         public string? NombreCompleto { get; set; }              // computed varchar(123), la genera SQL Server solo
     }
