@@ -22,9 +22,12 @@ namespace ApiTransporteLweb.Controllers
             _context = context;
         }
 
-        // GET /api/Formulario?busqueda=texto
+        // GET /api/Formulario?busqueda=texto&fechaDesde=2026-01-01&fechaHasta=2026-01-31
         [HttpGet]
-        public async Task<IActionResult> ObtenerPartes([FromQuery] string? busqueda)
+        public async Task<IActionResult> ObtenerPartes(
+            [FromQuery] string? busqueda,
+            [FromQuery] DateTime? fechaDesde,
+            [FromQuery] DateTime? fechaHasta)
         {
             var query = _context.ParteTrabajos.AsQueryable();
 
@@ -40,6 +43,18 @@ namespace ApiTransporteLweb.Controllers
                     (p.SituacionParte != null && p.SituacionParte.Contains(texto)));
             }
 
+            if (fechaDesde.HasValue)
+            {
+                query = query.Where(p => p.FechaParte >= fechaDesde.Value.Date);
+            }
+
+            if (fechaHasta.HasValue)
+            {
+                // Se incluye el día completo de "hasta" (hasta las 23:59:59)
+                var hasta = fechaHasta.Value.Date.AddDays(1).AddTicks(-1);
+                query = query.Where(p => p.FechaParte <= hasta);
+            }
+
             var partes = await query
                 .OrderByDescending(p => p.FechaParte)
                 .Select(p => new
@@ -52,7 +67,8 @@ namespace ApiTransporteLweb.Controllers
                     p.Reportadopor,
                     p.Supervisadopor,
                     p.HoraInicial,
-                    p.Horafinal
+                    p.Horafinal,
+                    p.Turno
                 })
                 .ToListAsync();
 
@@ -97,6 +113,8 @@ namespace ApiTransporteLweb.Controllers
                 parte.Reportadopor,
                 parte.Supervisadopor,
                 parte.SituacionParte,
+                parte.Turno,
+                parte.Combustible,
                 Detalles = detalles.Select(d => new
                 {
                     d.DHoroFinal,
@@ -106,7 +124,11 @@ namespace ApiTransporteLweb.Controllers
                     d.CodigoOrigen,
                     d.CodigoDestino,
                     d.NumViajes,
-                    d.Peso
+                    d.Peso,
+                    d.CodigoCiclo,
+                    d.ValorCiclo,
+                    d.Material,
+                    d.PHoras
                 })
             });
         }
@@ -141,6 +163,8 @@ namespace ApiTransporteLweb.Controllers
                     Reportadopor = dto.Reportadopor,
                     Supervisadopor = dto.Supervisadopor,
                     SituacionParte = dto.SituacionParte,
+                    Turno = dto.Turno,
+                    Combustible = dto.Combustible,
                     FechaCreacion = DateTime.Now,
                     UsuarioCreacion = usuarioActual
                 };
@@ -163,6 +187,10 @@ namespace ApiTransporteLweb.Controllers
                         CodigoDestino = det.CodigoDestino,
                         NumViajes = det.NumViajes,
                         Peso = det.Peso,
+                        CodigoCiclo = det.CodigoCiclo,
+                        ValorCiclo = det.ValorCiclo,
+                        Material = det.Material,
+                        PHoras = det.PHoras,
                         FechaCreacion = DateTime.Now,
                         UsuarioCreacion = usuarioActual
                     });
@@ -211,6 +239,8 @@ namespace ApiTransporteLweb.Controllers
                 parte.Reportadopor = dto.Reportadopor;
                 parte.Supervisadopor = dto.Supervisadopor;
                 parte.SituacionParte = dto.SituacionParte;
+                parte.Turno = dto.Turno;
+                parte.Combustible = dto.Combustible;
                 parte.FechaModificacion = DateTime.Now;
                 parte.UsuarioModificacion = usuarioActual;
 
@@ -236,6 +266,10 @@ namespace ApiTransporteLweb.Controllers
                         CodigoDestino = det.CodigoDestino,
                         NumViajes = det.NumViajes,
                         Peso = det.Peso,
+                        CodigoCiclo = det.CodigoCiclo,
+                        ValorCiclo = det.ValorCiclo,
+                        Material = det.Material,
+                        PHoras = det.PHoras,
                         FechaCreacion = DateTime.Now,
                         UsuarioCreacion = usuarioActual
                     });
@@ -306,7 +340,7 @@ namespace ApiTransporteLweb.Controllers
                 siguiente = maximo + 1;
             }
 
-            return siguiente.ToString("D10"); // 1 -> "0000000001"
+            return siguiente.ToString("D8"); // 1 -> "00000001"
         }
     }
 }

@@ -14,6 +14,8 @@
         public string? Reportadopor { get; set; }
         public string? Supervisadopor { get; set; }
         public string? SituacionParte { get; set; }
+        public string? Turno { get; set; }
+        public decimal? Combustible { get; set; }
 
         public List<DetalleDto> Detalles { get; set; } = new List<DetalleDto>();
     }
@@ -28,5 +30,9 @@
         public string? CodigoDestino { get; set; }
         public int? NumViajes { get; set; }
         public decimal? Peso { get; set; }
+        public string? CodigoCiclo { get; set; }
+        public string? ValorCiclo { get; set; }
+        public string? Material { get; set; }
+        public decimal? PHoras { get; set; }
     }
 }
