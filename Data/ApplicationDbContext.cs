@@ -17,6 +17,7 @@ namespace ApiTransporteLweb.Data
         public DbSet<UnidadesTransporte> UnidadesTransporte { get; set; }
         public DbSet<UnidadesCiclos> UnidadesCiclos { get; set; }
         public DbSet<CiclosPuntos> CiclosPuntos { get; set; }
+        public DbSet<VwOperacionesMaterial> VwOperacionesMateriales { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -67,6 +68,17 @@ namespace ApiTransporteLweb.Data
 
             modelBuilder.Entity<CiclosPuntos>()
                 .HasKey(c => new { c.CodigoEmp, c.CodigoPunto });
+
+            // Vista de solo lectura: sin clave primaria (Keyless)
+            modelBuilder.Entity<VwOperacionesMaterial>(entity =>
+            {
+                entity.HasNoKey();
+                entity.ToView("VW_Operaciones_material");
+
+                entity.Property(e => e.Codigom).HasColumnName("codigom");
+                entity.Property(e => e.Nombrem).HasColumnName("nombrem");
+                entity.Property(e => e.Abreviatura).HasColumnName("abreviatura");
+            });
 
             base.OnModelCreating(modelBuilder);
         }

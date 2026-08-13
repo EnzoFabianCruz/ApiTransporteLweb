@@ -19,7 +19,7 @@ namespace ApiTransporteLweb.Controllers
 
         // GET /api/Ciclos -> para el select de Ciclo en el detalle del Parte de Trabajo.
         // Al elegir un ciclo (mostrando "valor"), el frontend autocompleta
-        // CodigoOrigen, CodigoDestino y ValorCiclo, y puede mostrar nombreOrigen/nombreDestino.
+        // CodigoOrigen, CodigoDestino, ValorCiclo y Horas, y puede mostrar nombreOrigen/nombreDestino.
         [HttpGet]
         public async Task<IActionResult> ObtenerCiclos()
         {
@@ -36,6 +36,7 @@ namespace ApiTransporteLweb.Controllers
                 {
                     codigoCiclo = ciclo.CodigoCiclo,
                     valor = ciclo.Valor,
+                    horas = ciclo.Horas,
                     codigoOrigen = ciclo.CodigoOrigen,
                     nombreOrigen = origen != null ? origen.NombrePunto : null,
                     codigoDestino = ciclo.CodigoDestino,

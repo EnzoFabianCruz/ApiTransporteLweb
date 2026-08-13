@@ -7,5 +7,6 @@
         public string? CodigoOrigen { get; set; }               // char(6), relaciona con CiclosPuntos.CodigoPunto
         public string? CodigoDestino { get; set; }              // char(6), relaciona con CiclosPuntos.CodigoPunto
         public string? Valor { get; set; }                      // varchar(100), texto que se muestra como opción
+        public decimal? Horas { get; set; }                     // numeric(10,3)
     }
 }
