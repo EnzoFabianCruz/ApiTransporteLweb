@@ -7,6 +7,7 @@ namespace ApiTransporteLweb.Models
     {
         public string CodigoEmp { get; set; } = null!;       // char(3)
         public string NumeroParada { get; set; } = null!;    // char(10)
+        public string? NumeroParte { get; set; }               // char(10) - vincula con PARTETRABAJO.NumeroParte
         public DateTime? FechaParada { get; set; }
         public string? CodigoAnalitico { get; set; }          // char(6)
         public string? CodigoUnidad { get; set; }              // char(6)

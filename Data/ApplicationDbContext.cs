@@ -18,6 +18,7 @@ namespace ApiTransporteLweb.Data
         public DbSet<UnidadesCiclos> UnidadesCiclos { get; set; }
         public DbSet<CiclosPuntos> CiclosPuntos { get; set; }
         public DbSet<VwOperacionesMaterial> VwOperacionesMateriales { get; set; }
+        public DbSet<VwOperacionesMotivo> VwOperacionesMotivos { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -54,6 +55,12 @@ namespace ApiTransporteLweb.Data
                 .WithMany(p => p.Detalles)
                 .HasForeignKey(d => new { d.CodigoEmp, d.NumeroParada });
 
+            // La columna real en la BD tiene un typo: "observaciond" (con "d" extra al final).
+            // Se mapea explícitamente para mantener el nombre de propiedad limpio en C#.
+            modelBuilder.Entity<ParteParadaDetalle>()
+                .Property(d => d.Observacion)
+                .HasColumnName("observaciond");
+
             modelBuilder.Entity<Personal>()
                 .HasKey(p => p.CodigoPersonal);
 
@@ -78,6 +85,16 @@ namespace ApiTransporteLweb.Data
                 entity.Property(e => e.Codigom).HasColumnName("codigom");
                 entity.Property(e => e.Nombrem).HasColumnName("nombrem");
                 entity.Property(e => e.Abreviatura).HasColumnName("abreviatura");
+            });
+
+            // Vista de solo lectura: sin clave primaria (Keyless)
+            modelBuilder.Entity<VwOperacionesMotivo>(entity =>
+            {
+                entity.HasNoKey();
+                entity.ToView("VW_Operaciones_motivo");
+
+                entity.Property(e => e.Codigo).HasColumnName("Codigo");
+                entity.Property(e => e.Motivo).HasColumnName("Motivo");
             });
 
             base.OnModelCreating(modelBuilder);
