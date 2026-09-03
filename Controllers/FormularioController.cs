@@ -14,6 +14,7 @@ namespace ApiTransporteLweb.Controllers
     public class FormularioController : ControllerBase
     {
         private const string CODIGO_EMP_FIJO = "001";
+        private const string ROL_ADMIN = "Admin";
 
         private readonly ApplicationDbContext _context;
 
@@ -29,7 +30,16 @@ namespace ApiTransporteLweb.Controllers
             [FromQuery] DateTime? fechaDesde,
             [FromQuery] DateTime? fechaHasta)
         {
+            var usuarioActual = User.FindFirstValue(ClaimTypes.Name);
+            var esAdmin = User.IsInRole(ROL_ADMIN);
+
             var query = _context.ParteTrabajos.AsQueryable();
+
+            // Un operador (rol distinto de Admin) solo ve lo que él mismo creó
+            if (!esAdmin)
+            {
+                query = query.Where(p => p.UsuarioCreacion != null && p.UsuarioCreacion.Trim() == usuarioActual);
+            }
 
             if (!string.IsNullOrWhiteSpace(busqueda))
             {
@@ -92,6 +102,9 @@ namespace ApiTransporteLweb.Controllers
 
             if (parte == null)
                 return NotFound(new { mensaje = "Parte no encontrado" });
+
+            if (!TienePermisoSobre(parte))
+                return Forbid();
 
             var detalles = await _context.ParteTrabajoDetalles
                 .Where(d => d.NumeroParte.Trim() == numeroParte.Trim())
@@ -227,6 +240,9 @@ namespace ApiTransporteLweb.Controllers
                 if (parte == null)
                     return NotFound(new { mensaje = "Parte no encontrado" });
 
+                if (!TienePermisoSobre(parte))
+                    return Forbid();
+
                 parte.FechaParte = dto.FechaParte;
                 parte.CodigoAnalitico = dto.CodigoAnalitico;
                 parte.CodigoUnidad = dto.CodigoUnidad;
@@ -290,7 +306,7 @@ namespace ApiTransporteLweb.Controllers
 
         // DELETE /api/Formulario/{numeroParte} -> solo Admin
         [HttpDelete("{numeroParte}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = ROL_ADMIN)]
         public async Task<IActionResult> Eliminar(string numeroParte)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
@@ -317,6 +333,16 @@ namespace ApiTransporteLweb.Controllers
                 await transaction.RollbackAsync();
                 return StatusCode(500, new { mensaje = "Error al eliminar", detalle = ex.Message });
             }
+        }
+
+        // Un Admin puede ver/editar cualquier parte; un operador solo el suyo propio
+        private bool TienePermisoSobre(ParteTrabajo parte)
+        {
+            if (User.IsInRole(ROL_ADMIN))
+                return true;
+
+            var usuarioActual = User.FindFirstValue(ClaimTypes.Name);
+            return parte.UsuarioCreacion != null && parte.UsuarioCreacion.Trim() == usuarioActual;
         }
 
         // Método auxiliar: calcula el siguiente número de parte (8 dígitos, con ceros a la izquierda)

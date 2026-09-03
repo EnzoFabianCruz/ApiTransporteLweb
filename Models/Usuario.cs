@@ -10,5 +10,7 @@
         public bool Activo { get; set; }
         public DateTime FechaCreacion { get; set; }
         public string Rol { get; set; } = "Usuario";   // "Admin" o "Usuario"
+        public string? TokenRecuperacion { get; set; }
+        public DateTime? TokenExpiracion { get; set; }
     }
 }

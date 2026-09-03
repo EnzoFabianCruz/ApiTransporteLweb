@@ -28,6 +28,8 @@ builder.Services.AddCors(options =>
 // JWT
 builder.Services.AddScoped<JwtService>();
 
+builder.Services.AddScoped<EmailService>();
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;

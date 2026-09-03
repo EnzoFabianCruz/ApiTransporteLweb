@@ -14,6 +14,7 @@ namespace ApiTransporteLweb.Controllers
     public class ParteParadaController : ControllerBase
     {
         private const string CODIGO_EMP_FIJO = "001";
+        private const string ROL_ADMIN = "Admin";
 
         private readonly ApplicationDbContext _context;
 
@@ -29,10 +30,19 @@ namespace ApiTransporteLweb.Controllers
             [FromQuery] DateTime? fechaDesde,
             [FromQuery] DateTime? fechaHasta)
         {
+            var usuarioActual = User.FindFirstValue(ClaimTypes.Name);
+            var esAdmin = User.IsInRole(ROL_ADMIN);
+
             var query = _context.ParteParadas.AsQueryable();
 
             // Las paradas anuladas (situación 90) nunca deben mostrarse en la lista
             query = query.Where(p => p.SituacionParada == null || p.SituacionParada.Trim() != "90");
+
+            // Un operador (rol distinto de Admin) solo ve lo que él mismo creó
+            if (!esAdmin)
+            {
+                query = query.Where(p => p.UsuarioCreacion != null && p.UsuarioCreacion.Trim() == usuarioActual);
+            }
 
             if (!string.IsNullOrWhiteSpace(busqueda))
             {
@@ -93,6 +103,9 @@ namespace ApiTransporteLweb.Controllers
 
             if (parada == null)
                 return NotFound(new { mensaje = "Parada no encontrada" });
+
+            if (!TienePermisoSobre(parada))
+                return Forbid();
 
             var detalles = await _context.ParteParadaDetalles
                 .Where(d => d.NumeroParada.Trim() == numeroParada.Trim())
@@ -219,6 +232,9 @@ namespace ApiTransporteLweb.Controllers
                 if (parada == null)
                     return NotFound(new { mensaje = "Parada no encontrada" });
 
+                if (!TienePermisoSobre(parada))
+                    return Forbid();
+
                 parada.FechaParada = dto.FechaParada;
                 parada.NumeroParte = dto.NumeroParte;
                 parada.CodigoAnalitico = dto.CodigoAnalitico;
@@ -277,7 +293,7 @@ namespace ApiTransporteLweb.Controllers
 
         // DELETE /api/ParteParada/{numeroParada} -> solo Admin
         [HttpDelete("{numeroParada}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = ROL_ADMIN)]
         public async Task<IActionResult> Eliminar(string numeroParada)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
@@ -304,6 +320,16 @@ namespace ApiTransporteLweb.Controllers
                 await transaction.RollbackAsync();
                 return StatusCode(500, new { mensaje = "Error al eliminar", detalle = ex.Message });
             }
+        }
+
+        // Un Admin puede ver/editar cualquier parada; un operador solo la suya propia
+        private bool TienePermisoSobre(ParteParada parada)
+        {
+            if (User.IsInRole(ROL_ADMIN))
+                return true;
+
+            var usuarioActual = User.FindFirstValue(ClaimTypes.Name);
+            return parada.UsuarioCreacion != null && parada.UsuarioCreacion.Trim() == usuarioActual;
         }
 
         // Método auxiliar: calcula el siguiente número de parada (10 dígitos, con ceros a la izquierda)
