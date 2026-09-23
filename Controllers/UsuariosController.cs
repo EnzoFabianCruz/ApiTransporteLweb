@@ -70,6 +70,49 @@ namespace ApiTransporteLweb.Controllers
 
             return Ok(new { mensaje = "Contraseña actualizada correctamente" });
         }
+        // GET /api/Usuarios/mi-perfil -> el usuario logueado ve sus propios datos
+        [HttpGet("mi-perfil")]
+        public async Task<IActionResult> ObtenerMiPerfil()
+        {
+            var idActual = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var usuario = await _context.Usuarios.FindAsync(idActual);
+            if (usuario == null)
+                return NotFound(new { mensaje = "Usuario no encontrado" });
+
+            return Ok(new
+            {
+                usuario.Id,
+                usuario.NombreUsuario,
+                usuario.Nombre,
+                usuario.Email,
+                usuario.Rol,
+                usuario.CodigoPersonal
+            });
+        }
+
+        // PUT /api/Usuarios/mi-perfil -> el usuario logueado edita su Nombre y Email
+        // (Rol y CodigoPersonal quedan fuera a propósito: eso solo lo toca el Admin)
+        [HttpPut("mi-perfil")]
+        public async Task<IActionResult> ActualizarMiPerfil([FromBody] ActualizarPerfilDto dto)
+        {
+            var idActual = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var usuario = await _context.Usuarios.FindAsync(idActual);
+            if (usuario == null)
+                return NotFound(new { mensaje = "Usuario no encontrado" });
+
+            if (!string.IsNullOrWhiteSpace(dto.Email) && dto.Email != usuario.Email)
+            {
+                var emailEnUso = await _context.Usuarios.AnyAsync(u => u.Id != idActual && u.Email == dto.Email);
+                if (emailEnUso)
+                    return BadRequest(new { mensaje = "Ese correo ya está en uso por otro usuario" });
+            }
+
+            usuario.Nombre = dto.Nombre;
+            usuario.Email = dto.Email;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { mensaje = "Perfil actualizado correctamente" });
+        }
         [HttpPut("por-nombre/{nombreUsuario}/password")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> CambiarPasswordPorNombre(string nombreUsuario, [FromBody] CambiarPasswordDto dto)

@@ -15,7 +15,7 @@ namespace ApiTransporteLweb.Controllers
     {
         private const string CODIGO_EMP_FIJO = "001";
         private const string ROL_ADMIN = "Admin";
-
+        private const string ROL_SUPERVISOR = "Supervisor";
         private readonly ApplicationDbContext _context;
 
         public FormularioController(ApplicationDbContext context)
@@ -23,7 +23,6 @@ namespace ApiTransporteLweb.Controllers
             _context = context;
         }
 
-        // GET /api/Formulario?busqueda=texto&fechaDesde=2026-01-01&fechaHasta=2026-01-31
         [HttpGet]
         public async Task<IActionResult> ObtenerPartes(
             [FromQuery] string? busqueda,
@@ -32,11 +31,20 @@ namespace ApiTransporteLweb.Controllers
         {
             var usuarioActual = User.FindFirstValue(ClaimTypes.Name);
             var esAdmin = User.IsInRole(ROL_ADMIN);
+            var esSupervisor = User.IsInRole(ROL_SUPERVISOR);                 // ← nuevo
+            var codigoPersonalActual = User.FindFirstValue("CodigoPersonal"); // ← nuevo
 
             var query = _context.ParteTrabajos.AsQueryable();
 
-            // Un operador (rol distinto de Admin) solo ve lo que él mismo creó
-            if (!esAdmin)
+            if (esSupervisor)
+            {
+
+                query = query.Where(p =>
+                    codigoPersonalActual != null &&
+                    p.Supervisadopor != null &&
+                    p.Supervisadopor.Trim() == codigoPersonalActual);
+            }
+            else if (!esAdmin)
             {
                 query = query.Where(p => p.UsuarioCreacion != null && p.UsuarioCreacion.Trim() == usuarioActual);
             }
@@ -60,7 +68,6 @@ namespace ApiTransporteLweb.Controllers
 
             if (fechaHasta.HasValue)
             {
-                // Se incluye el día completo de "hasta" (hasta las 23:59:59)
                 var hasta = fechaHasta.Value.Date.AddDays(1).AddTicks(-1);
                 query = query.Where(p => p.FechaParte <= hasta);
             }
@@ -85,7 +92,6 @@ namespace ApiTransporteLweb.Controllers
             return Ok(partes);
         }
 
-        // GET /api/Formulario/siguiente-numero -> para mostrarlo en el formulario antes de guardar
         [HttpGet("siguiente-numero")]
         public async Task<IActionResult> ObtenerSiguienteNumero()
         {
@@ -93,7 +99,6 @@ namespace ApiTransporteLweb.Controllers
             return Ok(new { numeroParte = numero });
         }
 
-        // GET /api/Formulario/{numeroParte} -> cabecera + detalles, para Consultar/Modificar
         [HttpGet("{numeroParte}")]
         public async Task<IActionResult> ObtenerParte(string numeroParte)
         {
@@ -146,7 +151,6 @@ namespace ApiTransporteLweb.Controllers
             });
         }
 
-        // POST /api/Formulario/registrar -> crear
         [HttpPost("registrar")]
         public async Task<IActionResult> Registrar([FromBody] FormularioDto dto)
         {
@@ -222,7 +226,6 @@ namespace ApiTransporteLweb.Controllers
             }
         }
 
-        // PUT /api/Formulario/{numeroParte} -> modificar cabecera + reemplazar detalles
         [HttpPut("{numeroParte}")]
         public async Task<IActionResult> Modificar(string numeroParte, [FromBody] FormularioDto dto)
         {
@@ -260,7 +263,6 @@ namespace ApiTransporteLweb.Controllers
                 parte.FechaModificacion = DateTime.Now;
                 parte.UsuarioModificacion = usuarioActual;
 
-                // Reemplazar todos los detalles: borrar los viejos, insertar los nuevos
                 var detallesViejos = _context.ParteTrabajoDetalles
                     .Where(d => d.NumeroParte.Trim() == numeroParte.Trim());
                 _context.ParteTrabajoDetalles.RemoveRange(detallesViejos);
@@ -304,7 +306,6 @@ namespace ApiTransporteLweb.Controllers
             }
         }
 
-        // DELETE /api/Formulario/{numeroParte} -> solo Admin
         [HttpDelete("{numeroParte}")]
         [Authorize(Roles = ROL_ADMIN)]
         public async Task<IActionResult> Eliminar(string numeroParte)
@@ -335,17 +336,53 @@ namespace ApiTransporteLweb.Controllers
             }
         }
 
-        // Un Admin puede ver/editar cualquier parte; un operador solo el suyo propio
+        [HttpPatch("{numeroParte}/aprobar")]
+        [Authorize(Roles = ROL_ADMIN + "," + ROL_SUPERVISOR)]
+        public async Task<IActionResult> Aprobar(string numeroParte)
+        {
+            var parte = await _context.ParteTrabajos
+                .FirstOrDefaultAsync(p => p.NumeroParte.Trim() == numeroParte.Trim());
+
+            if (parte == null)
+                return NotFound(new { mensaje = "Parte no encontrado" });
+
+            var situacionActual = parte.SituacionParte?.Trim();
+
+            if (situacionActual == "90")
+                return BadRequest(new { mensaje = "No se puede aprobar un parte anulado" });
+
+            if (situacionActual == "20")
+                return BadRequest(new { mensaje = "El parte ya está aprobado" });
+
+            parte.SituacionParte = "20";
+            parte.FechaModificacion = DateTime.Now;
+            parte.UsuarioModificacion = User.FindFirstValue(ClaimTypes.Name) ?? "sistema";
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { mensaje = "Parte aprobado correctamente", situacionParte = "20" });
+        }
+
+        // Un Admin puede ver/editar cualquier parte;
+        // un Supervisor, solo el suyo (Supervisadopor == su CodigoPersonal);
+        // un operador, solo el que él mismo creó.
         private bool TienePermisoSobre(ParteTrabajo parte)
         {
             if (User.IsInRole(ROL_ADMIN))
                 return true;
 
+            if (User.IsInRole(ROL_SUPERVISOR))
+            {
+                var codigoPersonalActual = User.FindFirstValue("CodigoPersonal");
+                return codigoPersonalActual != null &&
+                       parte.Supervisadopor != null &&
+                       parte.Supervisadopor.Trim() == codigoPersonalActual;
+            }
+
             var usuarioActual = User.FindFirstValue(ClaimTypes.Name);
             return parte.UsuarioCreacion != null && parte.UsuarioCreacion.Trim() == usuarioActual;
         }
 
-        // Método auxiliar: calcula el siguiente número de parte (8 dígitos, con ceros a la izquierda)
         private async Task<string> GenerarSiguienteNumeroParte()
         {
             var numerosExistentes = await _context.ParteTrabajos
@@ -366,7 +403,7 @@ namespace ApiTransporteLweb.Controllers
                 siguiente = maximo + 1;
             }
 
-            return siguiente.ToString("D10"); // 1 -> "00000001"
+            return siguiente.ToString("D10");
         }
     }
 }

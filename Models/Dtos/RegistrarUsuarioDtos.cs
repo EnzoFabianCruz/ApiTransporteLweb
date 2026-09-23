@@ -7,6 +7,7 @@
         public string? Nombre { get; set; }
         public string? Email { get; set; }
         public string? Rol { get; set; }        // "Admin" o "Usuario", opcional (default "Usuario")
+        public string? CodigoPersonal { get; set; }
         public bool Activo { get; set; } = true; // por defecto activo al crearse
     }
 }

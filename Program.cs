@@ -17,8 +17,8 @@ builder.Services.AddCors(options =>
     options.AddPolicy("FrontendPolicy", policy =>
     {
         policy.WithOrigins(
-                "http://localhost:5173",   // Vite (tu frontend React)
-                "http://localhost:3000"
+                "http://localhost:5173"   // Vite (tu frontend React)
+                
               )
               .AllowAnyHeader()
               .AllowAnyMethod();

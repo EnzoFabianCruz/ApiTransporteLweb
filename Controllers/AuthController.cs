@@ -49,7 +49,8 @@ namespace ApiTransporteLweb.Controllers
                 usuarioId = usuario.Id,
                 nombreUsuario = usuario.NombreUsuario,
                 nombre = usuario.Nombre,
-                rol = usuario.Rol
+                rol = usuario.Rol,
+                codigoPersonal = usuario.CodigoPersonal
             });
         }
 
@@ -69,7 +70,8 @@ namespace ApiTransporteLweb.Controllers
                 Email = dto.Email,
                 Activo = true,
                 FechaCreacion = DateTime.Now,
-                Rol = dto.Rol ?? "Usuario"
+                Rol = dto.Rol ?? "Usuario",
+                CodigoPersonal = dto.CodigoPersonal
             };
 
             _context.Usuarios.Add(usuario);
@@ -93,7 +95,8 @@ namespace ApiTransporteLweb.Controllers
                     u.Email,
                     u.Activo,
                     u.FechaCreacion,
-                    u.Rol
+                    u.Rol,
+                    u.CodigoPersonal
                 })
                 .ToListAsync();
 

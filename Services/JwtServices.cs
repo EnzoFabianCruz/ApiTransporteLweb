@@ -17,12 +17,17 @@ namespace ApiTransporteLweb.Services
 
         public string GenerarToken(Usuario usuario)
         {
-            var claims = new[]
+            var claims = new List<Claim>
+    {
+        new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
+        new Claim(ClaimTypes.Name, usuario.NombreUsuario),
+        new Claim(ClaimTypes.Role, usuario.Rol)
+    };
+
+            if (!string.IsNullOrWhiteSpace(usuario.CodigoPersonal))
             {
-                new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
-                new Claim(ClaimTypes.Name, usuario.NombreUsuario),
-                new Claim(ClaimTypes.Role, usuario.Rol)
-            };
+                claims.Add(new Claim("CodigoPersonal", usuario.CodigoPersonal.Trim()));
+            }
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
             var credenciales = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

@@ -15,6 +15,7 @@ namespace ApiTransporteLweb.Controllers
     {
         private const string CODIGO_EMP_FIJO = "001";
         private const string ROL_ADMIN = "Admin";
+        private const string ROL_SUPERVISOR = "Supervisor";               // ← nuevo
 
         private readonly ApplicationDbContext _context;
 
@@ -23,7 +24,6 @@ namespace ApiTransporteLweb.Controllers
             _context = context;
         }
 
-        // GET /api/ParteParada?busqueda=texto&fechaDesde=2026-01-01&fechaHasta=2026-01-31
         [HttpGet]
         public async Task<IActionResult> ObtenerParadas(
             [FromQuery] string? busqueda,
@@ -32,15 +32,24 @@ namespace ApiTransporteLweb.Controllers
         {
             var usuarioActual = User.FindFirstValue(ClaimTypes.Name);
             var esAdmin = User.IsInRole(ROL_ADMIN);
+            var esSupervisor = User.IsInRole(ROL_SUPERVISOR);                 // ← nuevo
+            var codigoPersonalActual = User.FindFirstValue("CodigoPersonal"); // ← nuevo
 
             var query = _context.ParteParadas.AsQueryable();
 
             // Las paradas anuladas (situación 90) nunca deben mostrarse en la lista
             query = query.Where(p => p.SituacionParada == null || p.SituacionParada.Trim() != "90");
 
-            // Un operador (rol distinto de Admin) solo ve lo que él mismo creó
-            if (!esAdmin)
+            if (esSupervisor)                                                 // ← nuevo bloque
             {
+                query = query.Where(p =>
+                    codigoPersonalActual != null &&
+                    p.Supervisadopor != null &&
+                    p.Supervisadopor.Trim() == codigoPersonalActual);
+            }
+            else if (!esAdmin)
+            {
+                // Un operador (rol distinto de Admin y Supervisor) solo ve lo que él mismo creó
                 query = query.Where(p => p.UsuarioCreacion != null && p.UsuarioCreacion.Trim() == usuarioActual);
             }
 
@@ -86,7 +95,6 @@ namespace ApiTransporteLweb.Controllers
             return Ok(paradas);
         }
 
-        // GET /api/ParteParada/siguiente-numero -> para mostrarlo en el formulario antes de guardar
         [HttpGet("siguiente-numero")]
         public async Task<IActionResult> ObtenerSiguienteNumero()
         {
@@ -94,7 +102,6 @@ namespace ApiTransporteLweb.Controllers
             return Ok(new { numeroParada = numero });
         }
 
-        // GET /api/ParteParada/{numeroParada} -> cabecera + detalles, para Consultar/Modificar
         [HttpGet("{numeroParada}")]
         public async Task<IActionResult> ObtenerParada(string numeroParada)
         {
@@ -143,7 +150,6 @@ namespace ApiTransporteLweb.Controllers
             });
         }
 
-        // POST /api/ParteParada/registrar -> crear
         [HttpPost("registrar")]
         public async Task<IActionResult> Registrar([FromBody] ParteParadaDto dto)
         {
@@ -214,7 +220,6 @@ namespace ApiTransporteLweb.Controllers
             }
         }
 
-        // PUT /api/ParteParada/{numeroParada} -> modificar cabecera + reemplazar detalles
         [HttpPut("{numeroParada}")]
         public async Task<IActionResult> Modificar(string numeroParada, [FromBody] ParteParadaDto dto)
         {
@@ -255,7 +260,6 @@ namespace ApiTransporteLweb.Controllers
                 parada.FechaModificacion = DateTime.Now;
                 parada.UsuarioModificacion = usuarioActual;
 
-                // Reemplazar todos los detalles: borrar los viejos, insertar los nuevos
                 var detallesViejos = _context.ParteParadaDetalles
                     .Where(d => d.NumeroParada.Trim() == numeroParada.Trim());
                 _context.ParteParadaDetalles.RemoveRange(detallesViejos);
@@ -291,7 +295,6 @@ namespace ApiTransporteLweb.Controllers
             }
         }
 
-        // DELETE /api/ParteParada/{numeroParada} -> solo Admin
         [HttpDelete("{numeroParada}")]
         [Authorize(Roles = ROL_ADMIN)]
         public async Task<IActionResult> Eliminar(string numeroParada)
@@ -322,17 +325,26 @@ namespace ApiTransporteLweb.Controllers
             }
         }
 
-        // Un Admin puede ver/editar cualquier parada; un operador solo la suya propia
+        // Un Admin puede ver/editar cualquier parada;
+        // un Supervisor, solo la suya (Supervisadopor == su CodigoPersonal);
+        // un operador, solo la que él mismo creó.
         private bool TienePermisoSobre(ParteParada parada)
         {
             if (User.IsInRole(ROL_ADMIN))
                 return true;
 
+            if (User.IsInRole(ROL_SUPERVISOR))                                // ← nuevo
+            {
+                var codigoPersonalActual = User.FindFirstValue("CodigoPersonal");
+                return codigoPersonalActual != null &&
+                       parada.Supervisadopor != null &&
+                       parada.Supervisadopor.Trim() == codigoPersonalActual;
+            }
+
             var usuarioActual = User.FindFirstValue(ClaimTypes.Name);
             return parada.UsuarioCreacion != null && parada.UsuarioCreacion.Trim() == usuarioActual;
         }
 
-        // Método auxiliar: calcula el siguiente número de parada (10 dígitos, con ceros a la izquierda)
         private async Task<string> GenerarSiguienteNumeroParada()
         {
             var numerosExistentes = await _context.ParteParadas
@@ -353,7 +365,7 @@ namespace ApiTransporteLweb.Controllers
                 siguiente = maximo + 1;
             }
 
-            return siguiente.ToString("D10"); // 1 -> "0000000001"
+            return siguiente.ToString("D10");
         }
     }
 }
