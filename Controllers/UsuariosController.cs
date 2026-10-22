@@ -128,5 +128,62 @@ namespace ApiTransporteLweb.Controllers
 
             return Ok(new { mensaje = "Contraseña actualizada correctamente", nombreUsuario = usuario.NombreUsuario });
         }
+        // PUT /api/Usuarios/{id} -> Admin edita los datos/credenciales de cualquier usuario
+        [HttpPut("{id:int}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> ActualizarUsuario(int id, [FromBody] ActualizarUsuarioAdminDto dto)
+        {
+            var idActual = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+            var usuario = await _context.Usuarios.FindAsync(id);
+            if (usuario == null)
+                return NotFound(new { mensaje = "Usuario no encontrado" });
+
+            if (string.IsNullOrWhiteSpace(dto.NombreUsuario))
+                return BadRequest(new { mensaje = "El nombre de usuario es obligatorio" });
+
+            var rolesValidos = new[] { "Usuario", "Supervisor", "Admin" };
+            if (!rolesValidos.Contains(dto.Rol))
+                return BadRequest(new { mensaje = "Rol no válido" });
+
+            if (!string.IsNullOrEmpty(dto.NuevaPassword) && dto.NuevaPassword.Length < 6)
+                return BadRequest(new { mensaje = "La contraseña debe tener al menos 6 caracteres" });
+
+            // Evita que el admin se quite a sí mismo el acceso por error
+            if (id == idActual && (dto.Rol != "Admin" || !dto.Activo))
+                return BadRequest(new { mensaje = "No puedes quitarte el rol Admin ni desactivarte a ti mismo" });
+
+            // Nombre de usuario único
+            if (dto.NombreUsuario != usuario.NombreUsuario)
+            {
+                var existe = await _context.Usuarios
+                    .AnyAsync(u => u.Id != id && u.NombreUsuario == dto.NombreUsuario);
+                if (existe)
+                    return BadRequest(new { mensaje = "Ese nombre de usuario ya está en uso" });
+            }
+
+            // Email único (solo si viene con valor)
+            if (!string.IsNullOrWhiteSpace(dto.Email) && dto.Email != usuario.Email)
+            {
+                var emailEnUso = await _context.Usuarios
+                    .AnyAsync(u => u.Id != id && u.Email == dto.Email);
+                if (emailEnUso)
+                    return BadRequest(new { mensaje = "Ese correo ya está en uso por otro usuario" });
+            }
+
+            usuario.NombreUsuario = dto.NombreUsuario;
+            usuario.Nombre = dto.Nombre;
+            usuario.Email = dto.Email;
+            usuario.Rol = dto.Rol;
+            usuario.CodigoPersonal = dto.CodigoPersonal;
+            usuario.Activo = dto.Activo;
+
+            if (!string.IsNullOrWhiteSpace(dto.NuevaPassword))
+                usuario.Password = BCrypt.Net.BCrypt.HashPassword(dto.NuevaPassword);
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { mensaje = "Usuario actualizado correctamente" });
+        }
     }
 }
