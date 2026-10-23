@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ApiTransporteLweb.Data;
+using ApiTransporteLweb.Helpers;
 using ApiTransporteLweb.Models;
 using ApiTransporteLweb.Models.Dtos;
 
@@ -31,8 +32,8 @@ namespace ApiTransporteLweb.Controllers
         {
             var usuarioActual = User.FindFirstValue(ClaimTypes.Name);
             var esAdmin = User.IsInRole(ROL_ADMIN);
-            var esSupervisor = User.IsInRole(ROL_SUPERVISOR);                 // ← nuevo
-            var codigoPersonalActual = User.FindFirstValue("CodigoPersonal"); // ← nuevo
+            var esSupervisor = User.IsInRole(ROL_SUPERVISOR);
+            var codigoPersonalActual = User.FindFirstValue("CodigoPersonal");
 
             var query = _context.ParteTrabajos.AsQueryable();
 
@@ -159,6 +160,22 @@ namespace ApiTransporteLweb.Controllers
 
             var usuarioActual = User.FindFirstValue(ClaimTypes.Name) ?? "sistema";
 
+            // Regla: un Supervisor u operador siempre crea con la fecha de hoy y con su propio código.
+            // Se impone aquí (no se confía en lo que envíe el cliente). El Admin no tiene esta restricción.
+            if (!User.IsInRole(ROL_ADMIN))
+            {
+                var codigoPersonal = User.FindFirstValue("CodigoPersonal")?.Trim();
+                if (string.IsNullOrWhiteSpace(codigoPersonal))
+                    return BadRequest(new { mensaje = "Tu usuario no tiene un código de personal asignado" });
+
+                dto.FechaParte = ReglasFecha.HoyLima();
+
+                if (User.IsInRole(ROL_SUPERVISOR))
+                    dto.Supervisadopor = codigoPersonal;   // el supervisor queda como "Supervisado"
+                else
+                    dto.CodigoAnalitico = codigoPersonal;  // el operador queda como "Operador"
+            }
+
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
@@ -246,7 +263,14 @@ namespace ApiTransporteLweb.Controllers
                 if (!TienePermisoSobre(parte))
                     return Forbid();
 
-                parte.FechaParte = dto.FechaParte;
+                // Regla: solo se puede modificar lo de hoy o ayer (según la fecha GUARDADA, no la enviada)
+                if (!ReglasFecha.PuedeModificar(User, parte.FechaParte))
+                    return StatusCode(403, new { mensaje = "Solo se pueden modificar registros de hoy o de ayer" });
+
+                // Solo el Admin puede cambiar la fecha del parte
+                if (User.IsInRole(ROL_ADMIN))
+                    parte.FechaParte = dto.FechaParte;
+
                 parte.CodigoAnalitico = dto.CodigoAnalitico;
                 parte.CodigoUnidad = dto.CodigoUnidad;
                 parte.HoroInicial = dto.HoroInicial;
@@ -345,6 +369,14 @@ namespace ApiTransporteLweb.Controllers
 
             if (parte == null)
                 return NotFound(new { mensaje = "Parte no encontrado" });
+
+            // Un Supervisor solo aprueba lo suyo (Supervisadopor == su CodigoPersonal)
+            if (!TienePermisoSobre(parte))
+                return Forbid();
+
+            // Regla: el Supervisor solo aprueba lo de hoy o ayer; el Admin no tiene restricción
+            if (!ReglasFecha.PuedeModificar(User, parte.FechaParte))
+                return StatusCode(403, new { mensaje = "Solo se pueden aprobar registros de hoy o de ayer" });
 
             var situacionActual = parte.SituacionParte?.Trim();
 

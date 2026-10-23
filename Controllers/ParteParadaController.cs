@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ApiTransporteLweb.Data;
+using ApiTransporteLweb.Helpers;
 using ApiTransporteLweb.Models;
 using ApiTransporteLweb.Models.Dtos;
 
@@ -15,7 +16,7 @@ namespace ApiTransporteLweb.Controllers
     {
         private const string CODIGO_EMP_FIJO = "001";
         private const string ROL_ADMIN = "Admin";
-        private const string ROL_SUPERVISOR = "Supervisor";               // ← nuevo
+        private const string ROL_SUPERVISOR = "Supervisor";
 
         private readonly ApplicationDbContext _context;
 
@@ -32,15 +33,15 @@ namespace ApiTransporteLweb.Controllers
         {
             var usuarioActual = User.FindFirstValue(ClaimTypes.Name);
             var esAdmin = User.IsInRole(ROL_ADMIN);
-            var esSupervisor = User.IsInRole(ROL_SUPERVISOR);                 // ← nuevo
-            var codigoPersonalActual = User.FindFirstValue("CodigoPersonal"); // ← nuevo
+            var esSupervisor = User.IsInRole(ROL_SUPERVISOR);
+            var codigoPersonalActual = User.FindFirstValue("CodigoPersonal");
 
             var query = _context.ParteParadas.AsQueryable();
 
             // Las paradas anuladas (situación 90) nunca deben mostrarse en la lista
             query = query.Where(p => p.SituacionParada == null || p.SituacionParada.Trim() != "90");
 
-            if (esSupervisor)                                                 // ← nuevo bloque
+            if (esSupervisor)
             {
                 query = query.Where(p =>
                     codigoPersonalActual != null &&
@@ -240,7 +241,14 @@ namespace ApiTransporteLweb.Controllers
                 if (!TienePermisoSobre(parada))
                     return Forbid();
 
-                parada.FechaParada = dto.FechaParada;
+                // Regla: solo se puede modificar lo de hoy o ayer (según la fecha GUARDADA, no la enviada)
+                if (!ReglasFecha.PuedeModificar(User, parada.FechaParada))
+                    return StatusCode(403, new { mensaje = "Solo se pueden modificar registros de hoy o de ayer" });
+
+                // Solo el Admin puede cambiar la fecha de la parada
+                if (User.IsInRole(ROL_ADMIN))
+                    parada.FechaParada = dto.FechaParada;
+
                 parada.NumeroParte = dto.NumeroParte;
                 parada.CodigoAnalitico = dto.CodigoAnalitico;
                 parada.CodigoUnidad = dto.CodigoUnidad;
@@ -325,6 +333,42 @@ namespace ApiTransporteLweb.Controllers
             }
         }
 
+        // NUEVO: la lista de paradas llama a PATCH /ParteParada/{numero}/aprobar
+        [HttpPatch("{numeroParada}/aprobar")]
+        [Authorize(Roles = ROL_ADMIN + "," + ROL_SUPERVISOR)]
+        public async Task<IActionResult> Aprobar(string numeroParada)
+        {
+            var parada = await _context.ParteParadas
+                .FirstOrDefaultAsync(p => p.NumeroParada.Trim() == numeroParada.Trim());
+
+            if (parada == null)
+                return NotFound(new { mensaje = "Parada no encontrada" });
+
+            // Un Supervisor solo aprueba lo suyo (Supervisadopor == su CodigoPersonal)
+            if (!TienePermisoSobre(parada))
+                return Forbid();
+
+            // Regla: el Supervisor solo aprueba lo de hoy o ayer; el Admin no tiene restricción
+            if (!ReglasFecha.PuedeModificar(User, parada.FechaParada))
+                return StatusCode(403, new { mensaje = "Solo se pueden aprobar registros de hoy o de ayer" });
+
+            var situacionActual = parada.SituacionParada?.Trim();
+
+            if (situacionActual == "90")
+                return BadRequest(new { mensaje = "No se puede aprobar una parada anulada" });
+
+            if (situacionActual == "20")
+                return BadRequest(new { mensaje = "La parada ya está aprobada" });
+
+            parada.SituacionParada = "20";
+            parada.FechaModificacion = DateTime.Now;
+            parada.UsuarioModificacion = User.FindFirstValue(ClaimTypes.Name) ?? "sistema";
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { mensaje = "Parada aprobada correctamente", situacionParada = "20" });
+        }
+
         // Un Admin puede ver/editar cualquier parada;
         // un Supervisor, solo la suya (Supervisadopor == su CodigoPersonal);
         // un operador, solo la que él mismo creó.
@@ -333,7 +377,7 @@ namespace ApiTransporteLweb.Controllers
             if (User.IsInRole(ROL_ADMIN))
                 return true;
 
-            if (User.IsInRole(ROL_SUPERVISOR))                                // ← nuevo
+            if (User.IsInRole(ROL_SUPERVISOR))
             {
                 var codigoPersonalActual = User.FindFirstValue("CodigoPersonal");
                 return codigoPersonalActual != null &&
